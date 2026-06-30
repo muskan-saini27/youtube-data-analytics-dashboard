@@ -3,45 +3,151 @@ import pandas as pd
 import numpy as np
 import os
 
-# Matplotlib for data visualization
+# -------------------------------------
+# MATPLOTLIB
+# -------------------------------------
+
 import matplotlib
+
 matplotlib.use('Agg')
+
 import matplotlib.pyplot as plt
+# ==========================
+# DASHBOARD COLORS
+# ==========================
 
-# Machine Learning
+BG_COLOR = '#111111'
+
+CARD_COLOR = '#1a1a1a'
+
+TEXT_COLOR = '#ffffff'
+
+GRID_COLOR = '#444444'
+
+RED = '#ff0000'
+
+RED2 = '#ff4d4d'
+
+RED3 = '#ff8080'
+
+# -------------------------------------
+# MACHINE LEARNING
+# -------------------------------------
+
 from sklearn.linear_model import LinearRegression
-from sklearn.model_selection import train_test_split
-from sklearn.metrics import mean_absolute_error, r2_score
 
-# -----------------------------------------
-# FLASK APPLICATION SETUP
-# -----------------------------------------
+from sklearn.model_selection import train_test_split
+
+from sklearn.metrics import (
+    mean_absolute_error,
+    r2_score
+)
+
+# -------------------------------------
+# FLASK APP
+# -------------------------------------
+
 app = Flask(__name__)
 
-UPLOAD_FOLDER = "static"
+UPLOAD_FOLDER = 'static'
+
 app.config['UPLOAD_FOLDER'] = UPLOAD_FOLDER
 
+os.makedirs(
+    UPLOAD_FOLDER,
+    exist_ok=True
+)
+# ==========================
+# GRAPH THEME
+# ==========================
 
-# -----------------------------------------
+def setup_graph():
+
+    plt.style.use('dark_background')
+
+    fig = plt.figure(
+
+        figsize=(7,4),
+
+        facecolor=BG_COLOR
+
+    )
+
+    ax = plt.gca()
+
+    ax.set_facecolor(BG_COLOR)
+
+    ax.tick_params(
+
+        colors=TEXT_COLOR,
+
+        labelsize=10
+
+    )
+
+    ax.xaxis.label.set_color(
+
+        TEXT_COLOR
+
+    )
+
+    ax.yaxis.label.set_color(
+
+        TEXT_COLOR
+
+    )
+
+    ax.title.set_color(
+
+        TEXT_COLOR
+
+    )
+
+    for spine in ax.spines.values():
+
+        spine.set_color(
+
+            GRID_COLOR
+
+        )
+
+    plt.grid(
+
+        color=GRID_COLOR,
+
+        alpha=0.25
+
+    )
+
+    return fig, ax
+
+# -------------------------------------
 # HOME PAGE
-# -----------------------------------------
+# -------------------------------------
+
 @app.route('/')
+
 def home():
-    """
-    Render the file upload page.
-    """
-    return render_template('index.html')
 
+    return render_template(
+        'index.html'
+    )
 
-# -----------------------------------------
-# ANALYSIS ROUTE
-# -----------------------------------------
-@app.route('/analyze', methods=['POST'])
+# -------------------------------------
+# ANALYZE DATASET
+# -------------------------------------
+
+@app.route(
+    '/analyze',
+    methods=['POST']
+)
+
 def analyze():
 
-    # -----------------------------------------
+    # --------------------------
     # FILE UPLOAD
-    # -----------------------------------------
+    # --------------------------
+
     file = request.files['file']
 
     filepath = os.path.join(
@@ -51,407 +157,760 @@ def analyze():
 
     file.save(filepath)
 
-    # -----------------------------------------
+    # --------------------------
     # LOAD DATASET
-    # -----------------------------------------
-    df = pd.read_csv(filepath)
+    # --------------------------
 
-    # -----------------------------------------
+    df = pd.read_csv(
+        filepath
+    )
+
+    # --------------------------
     # DATA CLEANING
-    # -----------------------------------------
+    # --------------------------
 
-    # Remove missing values
     df = df.dropna()
 
-    # Convert publish_time to datetime format
-    df['publish_time'] = pd.to_datetime(
-        df['publish_time'],
-        errors='coerce'
+    df['publish_time'] = (
+        pd.to_datetime(
+            df['publish_time'],
+            errors='coerce'
+        )
     )
 
-    # Remove invalid dates
-    df = df.dropna(subset=['publish_time'])
+    df = df.dropna(
+        subset=['publish_time']
+    )
 
-    # Extract upload day
-    df['day'] = df['publish_time'].dt.day_name()
+    df = df[
+        df['views'] > 0
+    ]
 
-    # Remove rows with zero views
-    df = df[df['views'] > 0]
+    # --------------------------
+    # DATE FEATURES
+    # --------------------------
+    
+    df['day'] = (
+        df['publish_time']
+        .dt.day_name()
+    )
 
-    # -----------------------------------------
-    # FEATURE ENGINEERING
-    # -----------------------------------------
+    df['month'] = (
+        df['publish_time']
+        .dt.month_name()
+    )
+    
+    month_order = [
 
-    # Business Metric:
-    # Engagement Rate shows audience interaction
+    'January','February','March','April','May','June','July','August',
+    'September','October','November',
+    'December'
+
+]
+
+    df['month'] = pd.Categorical(
+
+    df['month'],
+
+    categories=month_order,
+
+    ordered=True
+
+)
+    
+
+    # --------------------------
+    # ENGAGEMENT RATE
+    # --------------------------
+    
+    # --------------------------
+# CATEGORY NAMES
+# --------------------------
+
+    category_map = {1:'Film',2:'Autos',10:'Music',15:'Pets',17:'Sports',
+    19:'Travel',20:'Gaming',22:'People',23:'Comedy',24:'Entertainment',
+    25:'News',26:'How To',27:'Education',28:'Science',29:'Activism'
+
+}
+
+    df['category_name'] = (
+
+    df['category_id']
+
+    .map(category_map)
+
+)
     df['engagement_rate'] = (
-        (df['likes'] + df['comment_count'])
-        / df['views']
+
+        (
+
+            df['likes']
+
+            +
+
+            df['comment_count']
+
+        )
+
+        /
+
+        df['views']
+
     ) * 100
 
-    # -----------------------------------------
-    # BUSINESS QUESTION 1:
-    # Which categories generate
-    # the highest audience engagement?
-    # -----------------------------------------
-
-    category_engagement = (
-        df.groupby('category_id')['engagement_rate']
-        .mean()
-        .sort_values(ascending=False)
-        .head(10)
-    )
-
-    # -----------------------------------------
-    # BUSINESS QUESTION 2:
-    # Which videos gained
-    # the highest number of views?
-    # -----------------------------------------
-
-    top_videos = (
-        df.sort_values(
-            by='views',
-            ascending=False
-        )
-        .head(10)
-    )
-
-    # -----------------------------------------
-    # BUSINESS QUESTION 3:
-    # Which day generates the
-    # highest engagement?
-    # -----------------------------------------
-
-    best_day = (
-        df.groupby('day')['engagement_rate']
-        .mean()
-        .idxmax()
-    )
-    # -----------------------------------------
-    # KPI METRICS FOR DASHBOARD
-    # -----------------------------------------
-
-    avg_engagement = round(
-    df['engagement_rate'].mean(),
-    2
-    )
-    # Total dataset views
-    total_views = int(
-    df['views'].sum()
-    )
+    # --------------------------
+    # KPI SECTION
+    # --------------------------
 
     total_videos = len(df)
-    # -----------------------------------------
-    # BUSINESS QUESTION 4:
-    # Which videos are viral?
-    # Viral = Top 10% viewed videos
-    # -----------------------------------------
 
-    viral_threshold = df['views'].quantile(0.90)
+    total_views = int(
+
+        df['views']
+
+        .sum()
+
+    )
+
+    avg_engagement = round(
+
+        df['engagement_rate']
+
+        .mean(),
+
+        2
+
+    )
+
+    best_day = (
+
+        df.groupby('day')
+
+        ['engagement_rate']
+
+        .mean()
+
+        .idxmax()
+
+    )
+
+    viral_threshold = (
+
+        df['views']
+
+        .quantile(0.90)
+
+    )
 
     viral_videos = df[
-        df['views'] >= viral_threshold
+
+        df['views']
+
+        >=
+
+        viral_threshold
+
     ]
 
-    # -----------------------------------------
-    # CORRELATION ANALYSIS
-    # -----------------------------------------
+    viral_count = len(
 
-    correlation_matrix = df[
-        [
-            'views',
-            'likes',
-            'comment_count',
-            'engagement_rate'
-        ]
-    ].corr()
+        viral_videos
 
-    # -----------------------------------------
-    # VISUALIZATION 1
-    # Top Categories By Engagement
-    # -----------------------------------------
-
-    plt.figure(figsize=(10, 5))
-
-    category_engagement.plot(
-        kind='bar'
     )
 
-    plt.title(
-        'Top Categories by Engagement Rate'
-    )
+    # --------------------------
+    # CATEGORY ANALYSIS
+    # --------------------------
 
-    plt.xlabel('Category ID')
-    plt.ylabel('Engagement Rate (%)')
+    category_data = (
 
-    plt.tight_layout()
+        df.groupby('category_name')
 
-    plt.savefig(
-        os.path.join(
-            app.config['UPLOAD_FOLDER'],
-            'category.png'
-        )
-    )
+        ['engagement_rate']
 
-    plt.close()
-
-    # -----------------------------------------
-    # VISUALIZATION 2
-    # Likes vs Views
-    # -----------------------------------------
-
-    plt.figure(figsize=(8, 6))
-
-    plt.scatter(
-        df['likes'],
-        df['views'],
-        alpha=0.5
-    )
-
-    plt.title(
-        'Likes vs Views'
-    )
-
-    plt.xlabel('Likes')
-    plt.ylabel('Views')
-
-    plt.tight_layout()
-
-    plt.savefig(
-        os.path.join(
-            app.config['UPLOAD_FOLDER'],
-            'scatter.png'
-        )
-    )
-
-    plt.close()
-
-    # -----------------------------------------
-    # VISUALIZATION 3
-    # Best Upload Day Analysis
-    # -----------------------------------------
-
-    plt.figure(figsize=(10, 5))
-
-    (
-        df.groupby('day')['engagement_rate']
         .mean()
-        .sort_values(ascending=False)
-        .plot(kind='bar')
-    )
 
-    plt.title(
-        'Average Engagement Rate by Upload Day'
-    )
+        .sort_values(
 
-    plt.xlabel('Day')
-    plt.ylabel('Engagement Rate (%)')
+            ascending=False
 
-    plt.tight_layout()
-
-    plt.savefig(
-        os.path.join(
-            app.config['UPLOAD_FOLDER'],
-            'day.png'
         )
+
+        .head(8)
+
     )
 
-    plt.close()
+    # --------------------------
+    # UPLOAD DAY ANALYSIS
+    # --------------------------
 
-    # -----------------------------------------
-    # VISUALIZATION 4
-    # Viral Videos
-    # -----------------------------------------
+    upload_day = (
+
+        df.groupby('day')
+
+        ['engagement_rate']
+
+        .mean()
+
+        .sort_values(
+
+            ascending=False
+
+        )
+
+    )
+
+    # --------------------------
+# MONTHLY TREND
+# --------------------------
+
+    monthly_trend = (
+
+    df.groupby(
+
+        'month'
+
+    )['views']
+
+    .sum()
+
+    .sort_index()
+
+)
+    # --------------------------
+    # TOP VIDEOS
+    # --------------------------
+
+    top_videos = (
+
+        df.sort_values(
+
+            by='views',
+
+            ascending=False
+
+        )
+
+        .head(10)
+
+    )
+
+    # --------------------------
+    # VIRAL VIDEOS
+    # --------------------------
 
     top_viral = (
+
         viral_videos
+
         .sort_values(
-        by='views',
-        ascending=False
-    )
+
+            by='views',
+
+            ascending=False
+
+        )
+
         .head(10)
+
     )
 
-    # Shorten long titles for better graph readability
+    # --------------------------
+    # SHORT TITLE
+    # --------------------------
+
     top_viral['short_title'] = (
-    top_viral['title']
-    .astype(str)
-    .str.slice(0, 35)
+
+        top_viral['title']
+
+        .astype(str)
+
+        .str.slice(
+
+            0,
+
+            25
+
+        )
+
     )
 
-    plt.figure(figsize=(12, 6))
+    # --------------------------
+    # MACHINE LEARNING
+    # --------------------------
 
-    plt.barh(
-    top_viral['short_title'],
-    top_viral['views']
-    )
+    X = df[[
 
-    plt.title(
-    'Top Viral Videos'
-)
-
-    plt.xlabel('Views')
-    plt.ylabel('Video Title')
-
-    plt.tight_layout()
-
-    plt.savefig(
-      os.path.join(
-        app.config['UPLOAD_FOLDER'],
-        'viral.png'
-    )
-    )
-
-    plt.close()
-
-    # -----------------------------------------
-    # MACHINE LEARNING OBJECTIVE
-    # Predict video views using
-    # engagement metrics
-    # -----------------------------------------
-
-    X = df[
-      [
         'likes',
+
         'comment_count',
+
         'engagement_rate'
-      ]
-    ]
+
+    ]]
 
     y = df['views']
 
     X_train, X_test, y_train, y_test = (
-       train_test_split(
-        X,
-        y,
-        test_size=0.20,
-        random_state=42
-       )
+
+        train_test_split(
+
+            X,
+
+            y,
+
+            test_size=0.20,
+
+            random_state=42
+
+        )
+
     )
 
     model = LinearRegression()
+
     model.fit(
-       X_train,
-       y_train
+
+        X_train,
+
+        y_train
+
     )
 
-    # -----------------------------------------
-    # MODEL EVALUATION
-    # -----------------------------------------
+    y_pred = model.predict(
 
-    y_pred = model.predict(X_test)
+        X_test
+
+    )
 
     r2 = round(
-       r2_score(y_test, y_pred) * 100,
-       2
+
+        r2_score(
+
+            y_test,
+
+            y_pred
+
+        ) * 100,
+
+        2
+
     )
 
     mae = int(
-       mean_absolute_error(
-        y_test,
-        y_pred
-       )
-    )
 
-    # -----------------------------------------
-    # PREDICTION USING
-    # AVERAGE DATASET VALUES
-    # -----------------------------------------
+        mean_absolute_error(
 
-    avg_likes = df['likes'].mean()
-    avg_comments = df['comment_count'].mean()
-    avg_eng_rate = df['engagement_rate'].mean()
+            y_test,
 
-    predicted_views = int(
-        abs(
-            model.predict(
-              [[
-                avg_likes,
-                avg_comments,
-                avg_eng_rate
-              ]]
-            )[0]
+            y_pred
+
         )
+
     )
 
-    # -----------------------------------------
-    # ACTUAL VS PREDICTED GRAPH
-    # -----------------------------------------
+    avg_likes = (
 
-    plt.figure(figsize=(8, 6))
+        df['likes']
 
-    plt.scatter(
-      y_test,
-      y_pred,
-      alpha=0.5
+        .mean()
+
     )
-    plt.plot(
-      [y_test.min(), y_test.max()],
-      [y_test.min(), y_test.max()],
-      'r--'
+
+    avg_comments = (
+
+        df['comment_count']
+
+        .mean()
+
     )
+
+    avg_rate = (
+
+        df['engagement_rate']
+
+        .mean()
+
+    )
+
+    prediction = int(
+
+        abs(
+
+            model.predict(
+
+                [[
+
+                    avg_likes,
+
+                    avg_comments,
+
+                    avg_rate
+
+                ]]
+
+            )[0]
+
+        )
+
+    )
+
+# ==========================
+# CATEGORY GRAPH
+# ==========================
+
+    fig, ax = setup_graph()
+
+    category_data.plot(
+
+    kind='barh',
+
+    color=[
+
+        RED,
+
+        RED2,
+
+        RED3,
+
+        RED,
+
+        RED2,
+
+        RED3,
+
+        RED,
+
+        RED2
+
+    ]
+
+)
 
     plt.title(
-      'Actual vs Predicted Views'
-    )
-    plt.xlabel('Actual Views')
-    plt.ylabel('Predicted Views')
+
+    'Top Categories'
+
+)
+
+    plt.xlabel(
+
+    'Engagement Rate'
+
+)
 
     plt.tight_layout()
 
     plt.savefig(
-      os.path.join(
-        app.config['UPLOAD_FOLDER'],
-        'prediction.png'
-      )
-    )
+
+    'static/category.png',
+
+    transparent=True,
+
+    bbox_inches='tight'
+
+)
 
     plt.close()
 
-    # -----------------------------------------
-    # CONVERT RESULTS TO HTML
-    # -----------------------------------------
+# ==========================
+# UPLOAD DAY GRAPH
+# ==========================
 
-    category_table = (
-        category_engagement
-        .to_frame(
-            name='Avg Engagement Rate (%)'
-        )
-        .to_html(
-            classes='table table-striped'
-        )
-    )
+    fig, ax = setup_graph()
 
-    video_table = (
-        top_videos[
-            ['title', 'views']
-        ]
-        .to_html(
-            classes='table table-striped',
-            index=False
-        )
-    )
+    upload_day.plot(
 
-    # -----------------------------------------
-    # SEND RESULTS TO TEMPLATE
-    # -----------------------------------------
+    kind='bar',
 
-    return render_template(
-    'result.html',
-    category_table=category_table,
-    video_table=video_table,
-    best_day=best_day,
-    prediction=predicted_views,
-    avg_engagement=avg_engagement,
-    total_videos=total_videos,
-    total_views=total_views,
-    r2=r2,
-    mae=mae
+    color=RED
+
 )
 
+    plt.title(
 
-# -----------------------------------------
-# APPLICATION ENTRY POINT
-# -----------------------------------------
-if __name__ == "__main__":
-    app.run(debug=True)
+    'Best Upload Day'
+
+)
+
+    plt.ylabel(
+
+    'Engagement'
+
+)
+
+    plt.tight_layout()
+
+    plt.savefig(
+
+    'static/day.png',
+
+    transparent=True,
+
+    bbox_inches='tight'
+
+)
+
+    plt.close()
+
+# ==========================
+# MONTHLY TREND
+# ==========================
+
+    fig, ax = setup_graph()
+
+    monthly_trend.plot(
+
+    linewidth=4,
+
+    color=RED
+
+)
+
+    plt.title(
+
+    'Monthly Views Trend'
+
+)
+
+    plt.ylabel(
+
+    'Views'
+
+)
+
+    plt.tight_layout()
+
+    plt.savefig(
+
+    'static/trend.png',
+
+    transparent=True,
+
+    bbox_inches='tight'
+
+)
+
+    plt.close()
+
+# ==========================
+# VIRAL GRAPH
+# ==========================
+
+    fig, ax = setup_graph()
+
+    plt.barh(
+
+    top_viral['short_title'],
+
+    top_viral['views'],
+
+    color=RED
+
+)
+
+    plt.title(
+
+    'Top Viral Videos'
+
+)
+
+    plt.tight_layout()
+
+    plt.savefig(
+
+    'static/viral.png',
+
+    transparent=True,
+
+    bbox_inches='tight'
+
+)
+
+    plt.close()
+
+    # ==========================
+# SCATTER GRAPH
+# ==========================
+
+    fig, ax = setup_graph()
+
+    plt.scatter(
+
+    df['likes'],
+
+    df['views'],
+
+    alpha=0.6,
+
+    color=RED
+
+)
+
+    plt.title(
+
+    'Likes vs Views'
+
+)
+
+    plt.xlabel(
+
+    'Likes'
+
+)
+
+    plt.ylabel(
+
+    'Views'
+
+)
+
+    plt.tight_layout()
+
+    plt.savefig(
+
+    'static/scatter.png',
+
+    transparent=True,
+
+    bbox_inches='tight'
+
+)
+
+    plt.close()
+
+    # ==========================
+# PREDICTION GRAPH
+# ==========================
+
+    fig, ax = setup_graph()
+
+    plt.scatter(
+
+    y_test,
+
+    y_pred,
+
+    alpha=0.6,
+
+    color=RED
+
+)
+
+    plt.plot(
+
+    [
+
+        y_test.min(),
+
+        y_test.max()
+
+    ],
+
+    [
+
+        y_test.min(),
+
+        y_test.max()
+
+    ],
+
+    '--',
+
+    linewidth=3,
+
+    color=RED2
+
+)
+
+    plt.title(
+
+    'Actual vs Predicted'
+
+)
+
+    plt.xlabel(
+
+    'Actual Views'
+
+)
+
+    plt.ylabel(
+
+    'Predicted Views'
+
+)
+
+    plt.tight_layout()
+
+    plt.savefig(
+
+    'static/prediction.png',
+
+    transparent=True,
+
+    bbox_inches='tight'
+
+)
+
+    plt.close()
+
+    # ==========================
+    # BUSINESS INSIGHTS
+    # ==========================
+
+    insights = [
+
+        'Music and Gaming have highest engagement.',
+
+        f'{best_day} is the best upload day.',
+
+        'Top 10% videos have viral potential.',
+
+        'Likes strongly influence views.',
+
+        'High engagement videos should be promoted.',
+
+        'ML predicts future views successfully.'
+
+    ]
+
+    # --------------------------
+    # DASHBOARD PAGE
+    # --------------------------
+
+    return render_template(
+
+        'dashboard.html',
+
+        total_videos=total_videos,
+
+        total_views=total_views,
+
+        avg_engagement=avg_engagement,
+
+        viral_count=viral_count,
+
+        best_day=best_day,
+
+        prediction=prediction,
+
+        r2=r2,
+
+        mae=mae,
+
+        insights=insights
+
+    )
+
+# -------------------------------------
+# RUN APP
+# -------------------------------------
+
+if __name__ == '__main__':
+
+    app.run(
+
+        debug=True
+
+    )
